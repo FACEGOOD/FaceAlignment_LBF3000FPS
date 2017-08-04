@@ -41,20 +41,12 @@ vector<cv::Point2d> ShapeToVecPoint(const Mat_d & Shape);
 
 Mat_d VecPointToShape(const vector<cv::Point2d>& VecPoint);
 
-cv::Mat CombineMultiImages(const std::vector<cv::Mat>& Images, const int NumberOfRows, const int NumberOfCols, const int Distance, const int ImageWidth, const int ImageHeight);
-
-void GetSimilarityTransform(const cv::Mat_<double>& shape_to, const cv::Mat_<double>& shape_from, cv::Mat_<double>& rotation, double & scale);
+Mat_d FgGetAffineTransform(const Mat_d & ShapeFrom, const Mat_d & ShapeTo);
 
 double CalculateError(cv::Mat_<double>& ground_truth_shape, cv::Mat_<double>& predicted_shape);
 
-bool ShapeInRect(Mat_d & shape, cv::Rect & ret);
-
-namespace MatFile
-{
-	std::ofstream & operator << (std::ofstream &Out, Mat_d &Obj);
-	std::ifstream & operator >> (std::ifstream &In, Mat_d &Obj);
-}
-
+std::ofstream & operator << (std::ofstream &Out, Mat_d &Obj);
+std::ifstream & operator >> (std::ifstream &In, Mat_d &Obj);
 
 struct FgFaceData
 {

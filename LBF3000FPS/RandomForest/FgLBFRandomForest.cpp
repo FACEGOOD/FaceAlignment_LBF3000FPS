@@ -50,13 +50,10 @@ void FgLBFRandomForest::TrainForest(const vector<Mat_d>& TargetVec)
 			vector<cv::Point2d> Vec{ A,B };
 			cv::transform(Vec, Vec, FaceData.MeanShapeTo);
 
-			A = Vec[0];
-			B = Vec[1];
-
-			RandomPoints(0, 0) = A.x + FaceData.CurrentShape(m_LandmarkIdx, 0);
-			RandomPoints(0, 1) = A.y + FaceData.CurrentShape(m_LandmarkIdx, 1);
-			RandomPoints(1, 0) = B.x + FaceData.CurrentShape(m_LandmarkIdx, 0);
-			RandomPoints(1, 1) = B.y + FaceData.CurrentShape(m_LandmarkIdx, 1);
+			RandomPoints(0, 0) = Vec[0].x + FaceData.CurrentShape(m_LandmarkIdx, 0);
+			RandomPoints(0, 1) = Vec[0].y + FaceData.CurrentShape(m_LandmarkIdx, 1);
+			RandomPoints(1, 0) = Vec[1].x + FaceData.CurrentShape(m_LandmarkIdx, 0);
+			RandomPoints(1, 1) = Vec[1].y + FaceData.CurrentShape(m_LandmarkIdx, 1);
 
 			Mat_d ImagePoints = Coordinate::Box2Image(RandomPoints, g_BoxVec[FaceData.BoxIdx]);
 			const Mat_uc& Image = g_ImageVec[FaceData.ImageIdx];

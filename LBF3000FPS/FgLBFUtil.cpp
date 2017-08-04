@@ -79,7 +79,7 @@ vector<cv::Rect>		g_BoxVec;
 
 FgLBFParam				g_TrainParam;
 
-std::ofstream & MatFile::operator<<(std::ofstream & Out, Mat_d & Obj)
+std::ofstream & operator<<(std::ofstream & Out, Mat_d & Obj)
 {
 	Out << Obj.rows << " " << Obj.cols << std::endl;
 	for (int32_t row = 0; row < Obj.rows; ++row)
@@ -92,17 +92,22 @@ std::ofstream & MatFile::operator<<(std::ofstream & Out, Mat_d & Obj)
 	return Out;
 }
 
-std::ifstream & MatFile::operator>>(std::ifstream & In, Mat_d & Obj)
+std::ifstream & operator>>(std::ifstream & In, Mat_d & Obj)
 {
 	int32_t row, col;
 
 	In >> row >> col;
+	if (In.bad())
+		return In;
+
 	Obj = Mat_d(row, col, 0.0);
 
 	for (int32_t row = 0; row < Obj.rows; ++row)
 	{
 		for (int32_t col = 0; col < Obj.cols; ++col)
 		{
+			if (In.bad())
+				return In;
 			In >> Obj(row, col);
 		}
 	}
@@ -111,117 +116,20 @@ std::ifstream & MatFile::operator>>(std::ifstream & In, Mat_d & Obj)
 }
 
 
-/**
-* @brief CombineMultiImages  Combine the input images to a single big image.
-* @param Images         The input images.
-* @param NumberOfRows   The number of the rows to put the input images.
-* @param NumberOfCols   The number of the cols to put the input images.
-* @param Distance       The distance between each image.
-* @param ImageWidth     The width of each image in the big image.
-* @param ImageHeight    The height of each image in the big image.
-* @return      The big image if the operation is successed;
-*              otherwise return empty image.
-*
-* @author sheng
-* @date 2015-03-24
-* @version 0.1
-*
-* @history
-*     <author>       <date>         <version>        <description>
-*      sheng       2015-03-24          0.1           build the function
-*
-*/
-cv::Mat CombineMultiImages(const std::vector<cv::Mat>& Images,
-	const int NumberOfRows,
-	const int NumberOfCols,
-	const int Distance,
-	const int ImageWidth,
-	const int ImageHeight)
+Mat_d FgGetAffineTransform(const Mat_d& ShapeFrom, const Mat_d& ShapeTo)
 {
-	// return empty mat if the Number of rows or cols is smaller than 1.  
-	assert((NumberOfRows > 0) && (NumberOfCols > 0));
-	if ((NumberOfRows < 1) || (NumberOfCols < 1))
+	if (ShapeFrom.rows != ShapeTo.rows || ShapeFrom.cols != 2 || ShapeTo.cols != 2)
+		ThrowFaile;
+
+	Mat_d X(ShapeFrom.rows, 3, 0.0);
+
+	for (int32_t i = 0; i < ShapeFrom.rows; ++i)
 	{
-		std::cout << "The number of the rows or the cols is smaller than 1."
-			<< std::endl;
-		return cv::Mat();
+		X(i, 0) = ShapeFrom(i, 0);
+		X(i, 1) = ShapeFrom(i, 1);
+		X(i, 2) = 1;
 	}
-
-
-	// return empty mat if the distance, the width or the height of image  
-	// is smaller than 1.  
-	assert((Distance > 0) && (ImageWidth > 0) && (ImageHeight > 0));
-	if ((Distance < 1) || (ImageWidth < 1) || (ImageHeight < 1))
-	{
-		std::cout << "The distance, the width or the height of the image is smaller than 1."
-			<< std::endl;
-		return cv::Mat();
-	}
-
-
-	// Get the number of the input images  
-	const int NUMBEROFINPUTIMAGES = static_cast<int>(Images.size());
-
-
-	// return empty mat if the number of the input images is too big.  
-	assert(NUMBEROFINPUTIMAGES <= NumberOfRows * NumberOfCols);
-	if (NUMBEROFINPUTIMAGES > NumberOfRows * NumberOfCols)
-	{
-		std::cout << "The number of images is too big." << std::endl;
-		return cv::Mat();
-	}
-
-
-	// return empty mat if the number of the input images is too low.  
-	assert(NUMBEROFINPUTIMAGES > 0);
-	if (NUMBEROFINPUTIMAGES < 1)
-	{
-		std::cout << "The number of images is too low." << std::endl;
-		return cv::Mat();
-	}
-
-
-	// create the big image  
-	const int WIDTH = Distance * (NumberOfCols + 1) + ImageWidth * NumberOfCols;
-	const int HEIGHT = Distance * (NumberOfRows + 1) + ImageHeight * NumberOfRows;
-	cv::Scalar Color(255, 255, 255);
-	if (Images[0].channels() == 1)
-	{
-		Color = cv::Scalar(255);
-	}
-	cv::Mat ResultImage(HEIGHT, WIDTH, Images[0].type(), Color);
-
-
-
-	// copy the input images to the big image  
-	for (int Index = 0; Index < NUMBEROFINPUTIMAGES; Index++)
-	{
-
-		assert(Images[Index].type() == ResultImage.type());
-		if (Images[Index].type() != ResultImage.type())
-		{
-			std::cout << "The No." << Index << "image has the different type."
-				<< std::endl;
-			return cv::Mat();
-		}
-
-
-		// Get the row and the col of No.Index image  
-		int Rows = Index / NumberOfCols;
-		int Cols = Index % NumberOfCols;
-
-		// The start point of No.Index image.  
-		int StartRows = Distance * (Rows + 1) + ImageHeight * Rows;
-		int StartCols = Distance * (Cols + 1) + ImageWidth * Cols;
-
-		// copy  No.Index image to the big image  
-		cv::Mat ROI = ResultImage(cv::Rect(StartCols, StartRows,
-			ImageWidth, ImageHeight));
-		cv::resize(Images[Index], ROI, cv::Size(ImageWidth, ImageHeight));
-
-	}
-
-	return ResultImage;
+	return ((X.t() * X).inv()*(X.t() * ShapeTo)).t();
 }
 
 double CalculateError(cv::Mat_<double>& ground_truth_shape, cv::Mat_<double>& predicted_shape) {
@@ -235,28 +143,4 @@ double CalculateError(cv::Mat_<double>& ground_truth_shape, cv::Mat_<double>& pr
 		sum += norm(ground_truth_shape.row(i) - predicted_shape.row(i));
 	}
 	return sum / (ground_truth_shape.rows*interocular_distance);
-}
-
-bool ShapeInRect(Mat_d& shape, cv::Rect& ret)
-{
-	double_t sum_x = 0.0, sum_y = 0.0;
-	double_t max_x = 0, min_x = 10000, max_y = 0, min_y = 10000;
-	for (int i = 0; i < shape.rows; i++)
-	{
-		if (shape(i, 0) > max_x) max_x = shape(i, 0);
-		if (shape(i, 0) < min_x) min_x = shape(i, 0);
-		if (shape(i, 1) > max_y) max_y = shape(i, 1);
-		if (shape(i, 1) < min_y) min_y = shape(i, 1);
-
-		sum_x += shape(i, 0);
-		sum_y += shape(i, 1);
-	}
-	sum_x /= shape.rows;
-	sum_y /= shape.rows;
-
-	if ((max_x - min_x) > ret.width * 1.5) return false;
-	if ((max_y - min_y) > ret.height * 1.5) return false;
-	if (std::abs(sum_x - (ret.x + ret.width / 2.0)) > ret.width / 2.0) return false;
-	if (std::abs(sum_y - (ret.y + ret.height / 2.0)) > ret.height / 2.0) return false;
-	return true;
 }

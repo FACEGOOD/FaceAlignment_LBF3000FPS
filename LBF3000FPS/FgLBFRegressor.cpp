@@ -20,10 +20,24 @@ vector<Mat_d> FgLBFRegressor::Train(int32_t Stage)
 {
 	vector<Mat_d> RegressionTarget(m_FaceDataVec.size());
 
+	//Concurrency::parallel_for(0, static_cast<int32_t>(m_FaceDataVec.size()), [&, this](int32_t i)
+	//{
+	//	m_FaceDataVec[i].ToMeanShape = cv::estimateAffine2D(m_FaceDataVec[i].CurrentShape, g_TrainParam.MeanShape, cv::noArray(), cv::LMEDS);
+	//	m_FaceDataVec[i].MeanShapeTo = cv::estimateAffine2D(g_TrainParam.MeanShape, m_FaceDataVec[i].CurrentShape, cv::noArray(), cv::LMEDS);
+
+	//	RegressionTarget[i] = g_TruthShapeVec[m_FaceDataVec[i].TruthShapeIdx] - m_FaceDataVec[i].CurrentShape;
+	//	vector<cv::Point2d> TempVec;
+	//	cv::transform(ShapeToVecPoint(RegressionTarget[i]), TempVec, m_FaceDataVec[i].ToMeanShape);
+	//	RegressionTarget[i] = VecPointToShape(TempVec);
+	//});
+
 	Concurrency::parallel_for(0, static_cast<int32_t>(m_FaceDataVec.size()), [&, this](int32_t i)
 	{
-		m_FaceDataVec[i].ToMeanShape = cv::estimateAffine2D(m_FaceDataVec[i].CurrentShape, g_TrainParam.MeanShape, cv::noArray(), cv::LMEDS);
-		m_FaceDataVec[i].MeanShapeTo = cv::estimateAffine2D(g_TrainParam.MeanShape, m_FaceDataVec[i].CurrentShape, cv::noArray(), cv::LMEDS);
+		m_FaceDataVec[i].ToMeanShape = FgGetAffineTransform(m_FaceDataVec[i].CurrentShape, g_TrainParam.MeanShape);
+		m_FaceDataVec[i].MeanShapeTo = FgGetAffineTransform(g_TrainParam.MeanShape, m_FaceDataVec[i].CurrentShape);
+
+		m_FaceDataVec[i].ToMeanShape(0, 2) = m_FaceDataVec[i].ToMeanShape(1, 2) = 0.0;
+		m_FaceDataVec[i].MeanShapeTo(0, 2) = m_FaceDataVec[i].MeanShapeTo(1, 2) = 0.0;
 
 		RegressionTarget[i] = g_TruthShapeVec[m_FaceDataVec[i].TruthShapeIdx] - m_FaceDataVec[i].CurrentShape;
 		vector<cv::Point2d> TempVec;
@@ -78,13 +92,10 @@ vector<Mat_d> FgLBFRegressor::Train(int32_t Stage)
 					vector<cv::Point2d> Vec{ A,B };
 					cv::transform(Vec, Vec, FaceData.MeanShapeTo);
 
-					A = Vec[0];
-					B = Vec[1];
-
-					RandomPoints(0, 0) = A.x + FaceData.CurrentShape(Landmark, 0);
-					RandomPoints(0, 1) = A.y + FaceData.CurrentShape(Landmark, 1);
-					RandomPoints(1, 0) = B.x + FaceData.CurrentShape(Landmark, 0);
-					RandomPoints(1, 1) = B.y + FaceData.CurrentShape(Landmark, 1);
+					RandomPoints(0, 0) = Vec[0].x + FaceData.CurrentShape(Landmark, 0);
+					RandomPoints(0, 1) = Vec[0].y + FaceData.CurrentShape(Landmark, 1);
+					RandomPoints(1, 0) = Vec[1].x + FaceData.CurrentShape(Landmark, 0);
+					RandomPoints(1, 1) = Vec[1].y + FaceData.CurrentShape(Landmark, 1);
 
 					Mat_d ImagePoints = Coordinate::Box2Image(RandomPoints, g_BoxVec[m_FaceDataVec[i].BoxIdx]);
 					auto& Image = g_ImageVec[m_FaceDataVec[i].ImageIdx];
@@ -184,13 +195,14 @@ vector<Mat_d> FgLBFRegressor::Train(int32_t Stage)
 
 Mat_d FgLBFRegressor::Predict(Mat_uc& Image, Mat_d& CurrentShape, cv::Rect& Box, Mat_d& MeanShapeTo)
 {
-	feature_node* Features = new feature_node[g_TrainParam.TreeNumPerForest * g_TrainParam.LandmarkNumPerFace + 1]();
+	static feature_node* Features = new feature_node[g_TrainParam.TreeNumPerForest * g_TrainParam.LandmarkNumPerFace + 1]();
 
-	int32_t Ind = 0;
-	int32_t Index = 1;
+	vector<int32_t> IndexVec(g_TrainParam.LandmarkNumPerFace);
+	IndexVec[0] = 1;
+	for (int32_t Landmark = 0; Landmark < g_TrainParam.LandmarkNumPerFace - 1; ++Landmark)
+		IndexVec[Landmark + 1] = IndexVec[Landmark] + m_RandomForestVec[Landmark].GetLeafNodesNum();
 
-	for (int32_t Landmark = 0; Landmark < g_TrainParam.LandmarkNumPerFace; ++Landmark)
-		//concurrency::parallel_for(0, g_TrainParam.LandmarkNumPerFace, [&](int32_t Landmark)
+	concurrency::parallel_for(0, g_TrainParam.LandmarkNumPerFace, [&](int32_t Landmark)
 	{
 		for (int32_t Tree = 0; Tree < g_TrainParam.TreeNumPerForest; ++Tree)
 		{
@@ -200,19 +212,13 @@ Mat_d FgLBFRegressor::Predict(Mat_uc& Image, Mat_d& CurrentShape, cv::Rect& Box,
 			{
 				Mat_d RandomPoints = Mat_d::zeros(2, 2);
 
-				cv::Point2d A = Node->m_FeatureLocations.first;
-				cv::Point2d B = Node->m_FeatureLocations.second;
-
-				vector<cv::Point2d> Vec{ A,B };
+				vector<cv::Point2d> Vec{ Node->m_FeatureLocations.first,Node->m_FeatureLocations.second };
 				cv::transform(Vec, Vec, MeanShapeTo);
 
-				A = Vec[0];
-				B = Vec[1];
-
-				RandomPoints(0, 0) = A.x + CurrentShape(Landmark, 0);
-				RandomPoints(0, 1) = A.y + CurrentShape(Landmark, 1);
-				RandomPoints(1, 0) = B.x + CurrentShape(Landmark, 0);
-				RandomPoints(1, 1) = B.y + CurrentShape(Landmark, 1);
+				RandomPoints(0, 0) = Vec[0].x + CurrentShape(Landmark, 0);
+				RandomPoints(0, 1) = Vec[0].y + CurrentShape(Landmark, 1);
+				RandomPoints(1, 0) = Vec[1].x + CurrentShape(Landmark, 0);
+				RandomPoints(1, 1) = Vec[1].y + CurrentShape(Landmark, 1);
 
 				Mat_d ImagePoints = Coordinate::Box2Image(RandomPoints, Box);
 
@@ -230,30 +236,26 @@ Mat_d FgLBFRegressor::Predict(Mat_uc& Image, Mat_d& CurrentShape, cv::Rect& Box,
 				else
 					Node = Node->m_RightChild;
 			}
-
-			Features[Ind].index = Index + Node->m_LeafIdentity;
-			Features[Ind].value = 1.0;
-			Ind++;
+			Features[Tree + Landmark * g_TrainParam.TreeNumPerForest].index = IndexVec[Landmark] + Node->m_LeafIdentity;
+			Features[Tree + Landmark * g_TrainParam.TreeNumPerForest].value = 1.0;
 		}
-		Index += m_RandomForestVec[Landmark].GetLeafNodesNum();
 	}
-	//);
+	);
 
 
 	Features[g_TrainParam.TreeNumPerForest * g_TrainParam.LandmarkNumPerFace].index = -1;
 	Features[g_TrainParam.TreeNumPerForest * g_TrainParam.LandmarkNumPerFace].value = -1.0;
 
-	Mat_d PredictDelta(g_TrainParam.LandmarkNumPerFace, 2, 0.0);
-	for (int32_t Landmark = 0; Landmark < g_TrainParam.LandmarkNumPerFace; ++Landmark)
+	static vector<cv::Point2d> PredictDeltaVec(g_TrainParam.LandmarkNumPerFace);
+	concurrency::parallel_for(0, g_TrainParam.LandmarkNumPerFace, [&](int32_t Landmark)
 	{
-		PredictDelta(Landmark, 0) = predict(m_LinearModelX[Landmark], Features);
-		PredictDelta(Landmark, 1) = predict(m_LinearModelY[Landmark], Features);
-	}
+		PredictDeltaVec[Landmark].x = predict(m_LinearModelX[Landmark], Features);
+		PredictDeltaVec[Landmark].y = predict(m_LinearModelY[Landmark], Features);
+	});
 
-	delete[] Features;
 
 	vector<cv::Point2d> TempVec;
-	cv::transform(ShapeToVecPoint(PredictDelta), TempVec, MeanShapeTo);
+	cv::transform(PredictDeltaVec, TempVec, MeanShapeTo);
 	return VecPointToShape(TempVec);
 }
 
