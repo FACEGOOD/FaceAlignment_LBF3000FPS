@@ -1,3 +1,37 @@
+/*
++	LBF3000
++	A Implementation of highly efficient and very accurate regression approach for face alignment.
+	Quantum Dynamics Co.,Ltd. 量子动力（深圳）计算机科技有限公司
+
+	Based on the paper 'Face Alignment at 3000 FPS via Regressing Local Binary Features'
+	University of Science and Technology of China.
+	Microsoft Research.
+
++	'LBF3000' is developing under the terms of the GNU General Public License as published by the Free Software Foundation.
++	The project lunched by 'Quantum Dynamics Lab.' since 4.Aug.2017.
+
++	You can redistribute it and/or modify it under the terms of the GNU General Public License version 2 (GPLv2) of
++	the license as published by the free software foundation.this program is distributed in the hope
++	that it will be useful,but without any warranty.without even the implied warranty of merchantability
++	or fitness for a particular purpose.
+
++	This project allows for academic research only.
++	本项目代码仅授权于学术研究，不可用于商业化。
+
++	(C)	Quantum Dynamics Lab. 量子动力实验室
++		Website : http://www.facegood.cc
++		Contact Us : jelo@facegood.cc
+
++		-Thanks to Our Committers and Friends
++		-Best Wish to all who Contributed and Inspired
+*/
+
+/*
++	Function & Global & Macro
+
++	Date:		2017/7/20
++	Author:		ZhaoHang
+*/
 #include "FgLBFUtil.h"
 
 
@@ -132,15 +166,16 @@ Mat_d FgGetAffineTransform(const Mat_d& ShapeFrom, const Mat_d& ShapeTo)
 	return ((X.t() * X).inv()*(X.t() * ShapeTo)).t();
 }
 
-double CalculateError(cv::Mat_<double>& ground_truth_shape, cv::Mat_<double>& predicted_shape) {
-	cv::Mat_<double> temp;
-	temp = ground_truth_shape.rowRange(36, 41) - ground_truth_shape.rowRange(42, 47);
-	double x = mean(temp.col(0))[0];
-	double y = mean(temp.col(1))[0];
-	double interocular_distance = sqrt(x*x + y*y);
-	double sum = 0;
-	for (int i = 0; i < ground_truth_shape.rows; i++) {
-		sum += norm(ground_truth_shape.row(i) - predicted_shape.row(i));
+
+double_t CalculateError(Mat_d& TruthShape, Mat_d& PredictedShape)
+{
+	Mat_d Temp = TruthShape.rowRange(36, 41) - TruthShape.rowRange(42, 47);
+	double_t x = cv::mean(Temp.col(0))[0];
+	double_t y = cv::mean(Temp.col(1))[0];
+	double_t InterocularDistance = sqrt(x*x + y*y);
+	double_t Sum = 0;
+	for (int i = 0; i < TruthShape.rows; i++) {
+		Sum += norm(TruthShape.row(i) - PredictedShape.row(i));
 	}
-	return sum / (ground_truth_shape.rows*interocular_distance);
+	return Sum / (TruthShape.rows * InterocularDistance);
 }

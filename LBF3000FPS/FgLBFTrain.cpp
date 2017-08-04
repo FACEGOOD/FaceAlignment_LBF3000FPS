@@ -1,3 +1,37 @@
+/*
++	LBF3000
++	A Implementation of highly efficient and very accurate regression approach for face alignment.
+	Quantum Dynamics Co.,Ltd. 量子动力（深圳）计算机科技有限公司
+
+	Based on the paper 'Face Alignment at 3000 FPS via Regressing Local Binary Features'
+	University of Science and Technology of China.
+	Microsoft Research.
+
++	'LBF3000' is developing under the terms of the GNU General Public License as published by the Free Software Foundation.
++	The project lunched by 'Quantum Dynamics Lab.' since 4.Aug.2017.
+
++	You can redistribute it and/or modify it under the terms of the GNU General Public License version 2 (GPLv2) of
++	the license as published by the free software foundation.this program is distributed in the hope
++	that it will be useful,but without any warranty.without even the implied warranty of merchantability
++	or fitness for a particular purpose.
+
++	This project allows for academic research only.
++	本项目代码仅授权于学术研究，不可用于商业化。
+
++	(C)	Quantum Dynamics Lab. 量子动力实验室
++		Website : http://www.facegood.cc
++		Contact Us : jelo@facegood.cc
+
++		-Thanks to Our Committers and Friends
++		-Best Wish to all who Contributed and Inspired
+*/
+
+/*
++	Start Train & Start Predict
+
++	Date:		2017/7/20
++	Author:		ZhaoHang
+*/
 #include <fstream>
 #include <ppl.h>
 #include <Mutex>
@@ -45,7 +79,6 @@ void FgLBFTrain::Load()
 	{
 		TrainConfig >> m_TestImagePath;
 	}
-
 	TrainConfig.close();
 
 	g_TrainParam.MeanShape = GetMeanShape(g_TruthShapeVec, g_BoxVec);
@@ -90,29 +123,6 @@ void FgLBFTrain::Train()
 void FgLBFTrain::Predict(string ImageListPath)
 {
 	LoadFromPath(m_TrainPath + "Model/");
-
-	//vector<Mat_uc>			ImageVec;
-	//vector<Mat_d>			TruthShapeVec;
-	//vector<cv::Rect>		BoxVec;
-	//LoadImageList(ImageListPath, ImageVec, TruthShapeVec, BoxVec);
-
-	//double_t E = 0;
-	//for (int32_t i = 0; i < ImageVec.size(); ++i)
-	//{
-	//	Mat_d PredictShape = Predict(ImageVec[i], BoxVec[i]);
-	//	Mat_d ImageShape = Coordinate::Box2Image(PredictShape, BoxVec[i]);
-	//	for (int32_t Landmark = 0; Landmark < ImageShape.rows; ++Landmark)
-	//	{
-	//		cv::circle(ImageVec[i], { static_cast<int32_t>(ImageShape(Landmark,0)) ,static_cast<int32_t>(ImageShape(Landmark,1)) }, 4, { 0 }, -1);
-	//	}
-	//	cv::imshow("T", ImageVec[i]);
-	//	double_t Err = CalculateError(TruthShapeVec[i], PredictShape);
-	//	std::cout << Err << std::endl;
-	//	E += Err;
-	//	cv::waitKey(-1);
-	//}
-	//std::cout << "Error :[" << E << "]\t Mean Error :[" << E / ImageVec.size() << "]" << std::endl;
-
 
 	cv::VideoCapture Cam(0);
 
@@ -177,27 +187,24 @@ Mat_d FgLBFTrain::Predict(Mat_uc & Image, cv::Rect Box, Mat_d& LastFrame)
 		Mat_d Transform = FgGetAffineTransform(g_TrainParam.MeanShape, LastFrame);
 		cv::transform(ShapeToVecPoint(g_TrainParam.MeanShape), TempVec, Transform);
 		TransformedMeanShape = VecPointToShape(TempVec);
-	}
 
-	Mat_d CurrentShape = TransformedMeanShape.clone();
-
-	//SHOW INIT IMAGE
-	{
-		Mat_uc I = Image.clone();
-		Mat_d InitShape = CurrentShape.clone();
-		InitShape = Coordinate::Box2Image(InitShape, Box);
-		for (int32_t Landmark = 0; Landmark < g_TrainParam.LandmarkNumPerFace; ++Landmark)
 		{
-			cv::circle(I, { static_cast<int32_t>(InitShape(Landmark,0)) ,static_cast<int32_t>(InitShape(Landmark,1)) }, 2, { 255 }, -1);
+			Mat_uc I = Image.clone();
+			Mat_d InitShape = TransformedMeanShape.clone();
+			InitShape = Coordinate::Box2Image(InitShape, Box);
+			for (int32_t Landmark = 0; Landmark < g_TrainParam.LandmarkNumPerFace; ++Landmark)
+			{
+				cv::circle(I, { static_cast<int32_t>(InitShape(Landmark,0)) ,static_cast<int32_t>(InitShape(Landmark,1)) }, 2, { 255 }, -1);
+			}
+			cv::imshow("Init", I);
 		}
-		cv::imshow("Init", I);
 	}
+	Mat_d CurrentShape = TransformedMeanShape.clone();
 
 	for (int32_t Stage = 0; Stage < m_RegressorVec.size(); ++Stage)
 	{
 		Mat_d MeanShapeTo = FgGetAffineTransform(g_TrainParam.MeanShape, CurrentShape);
 		MeanShapeTo(0, 2) = MeanShapeTo(1, 2) = 0;
-		std::cout << MeanShapeTo << std::endl;
 		CurrentShape += m_RegressorVec[Stage].Predict(Image, CurrentShape, Box, MeanShapeTo);
 	}
 	return CurrentShape;
@@ -338,7 +345,7 @@ void FgLBFTrain::LoadImageList(string FilePath, vector<Mat_uc>& ImageVec, vector
 		{
 			//scale 1.5
 			double_t Scale = 2.0;
-			int32_t ImageSize = 1000;
+			int32_t ImageSize = 400;
 
 			double_t CenterX = var.x + 0.5 * var.width;
 			double_t CenterY = var.y + 0.5 * var.height;
@@ -404,7 +411,6 @@ void FgLBFTrain::DataAugment()
 	std::uniform_int_distribution<int32_t> RotateAngleGen(0, 30);
 	std::uniform_real_distribution<double_t> ScaleGen(0.8, 1.2);
 
-	//for (int32_t j = 0; j < m_FaceDataVec.size(); ++j)
 	std::mutex mtx;
 	concurrency::parallel_for<size_t>(0, m_FaceDataVec.size(), [&](size_t j) 
 	{
